@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Shopping Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .chat-container { height: calc(100vh - 180px); }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-center">
+
+    <div class="w-full max-w-4xl bg-white shadow-xl rounded-lg overflow-hidden flex flex-col h-[90vh]">
+        
+        <div class="bg-indigo-600 p-4 text-white flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center">
+                AI Shopping Agent
+                <span class="ml-2 text-xs bg-indigo-500 px-2 py-1 rounded">Online</span>
+            </h1>
+            <button onclick="clearChat()" class="text-sm hover:text-indigo-200">Clear Chat</button>
+        </div>
+
+        <div id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50 chat-container">
+            <div class="flex items-start">
+                <div class="bg-white border p-3 rounded-lg rounded-tl-none shadow-sm max-w-[80%]">
+                    <p class="text-gray-800">Hello! I'm your personal shopping assistant. How can I help you today?</p>
+                    <ul class="list-disc list-inside mt-2 text-sm text-gray-600">
+                        <li>"Recommend running shoes for me."</li>
+                        <li>"Do you have any tumblers?"</li>
+                        <li>Or upload an image to search! </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-white border-t">
+            <div id="image-preview" class="hidden mb-2 relative w-20 h-20">
+                <img id="preview-img" src="" class="w-full h-full object-cover rounded border">
+                <button onclick="removeImage()" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <label class="cursor-pointer text-gray-500 hover:text-indigo-600 p-2" title="Upload Image">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <input type="file" id="image-upload" class="hidden" accept="image/*" onchange="handleImageSelect(this)">
+                </label>
+
+                <input type="text" id="user-input" 
+                    class="flex-1 border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Type what you are looking for..." 
+                    onkeypress="if(event.key === 'Enter') sendMessage()">
+                
+                <button onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-6 py-2 transition">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        let selectedImage = null;
+
+        function handleImageSelect(input) {
+            if (input.files && input.files[0]) {
+                selectedImage = input.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('preview-img').src = e.target.result;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function removeImage() {
+            selectedImage = null;
+            document.getElementById('image-upload').value = '';
+            document.getElementById('image-preview').classList.add('hidden');
+        }
+
+        function appendMessage(sender, text, isProduct = false) {
+            const div = document.createElement('div');
+            div.className = sender === 'user' ? 'flex justify-end' : 'flex items-start';
+            
+            const bubble = document.createElement('div');
+            bubble.className = sender === 'user' 
+                ? 'bg-indigo-600 text-white p-3 rounded-lg rounded-tr-none shadow-sm max-w-[80%]' 
+                : 'bg-white border text-gray-800 p-3 rounded-lg rounded-tl-none shadow-sm max-w-[80%]';
+            
+            if (isProduct) {
+                bubble.innerHTML = text; 
+                bubble.className += " w-full"; 
+            } else {
+                bubble.textContent = text;
+            }
+
+            div.appendChild(bubble);
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function generateProductCard(product) {
+            return `
+                <div class="flex gap-4 border-b pb-2 mb-2 last:border-0 last:mb-0 last:pb-0">
+                    <img src="${product.image_url}" class="w-20 h-20 object-cover rounded bg-gray-200">
+                    <div class="flex-1">
+                        <h3 class="font-bold text-gray-800">${product.name}</h3>
+                        <p class="text-xs text-gray-500 line-clamp-2 my-1">${product.description}</p>
+                        <div class="flex justify-between items-center mt-2">
+                            <span class="text-indigo-600 font-bold">$${product.price}</span>
+                            <button class="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200">View Details</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const text = input.value.trim();
+
+            if (!text && !selectedImage) return;
+
+            if (selectedImage) {
+                appendMessage('user', '[Image Uploaded] ' + text);
+            } else {
+                appendMessage('user', text);
+            }
+            
+            input.value = '';
+            
+            // Loading State
+            const loadingId = 'loading-' + Date.now();
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = loadingId;
+            loadingDiv.className = 'flex items-start';
+            loadingDiv.innerHTML = `<div class="bg-gray-100 text-gray-500 p-3 rounded-lg text-sm"> Thinking...</div>`;
+            chatBox.appendChild(loadingDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                let data;
+                
+                if (selectedImage) {
+                    const formData = new FormData();
+                    formData.append('file', selectedImage);
+                    
+                    const res = await fetch('http://127.0.0.1:8000/search-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    data = await res.json();
+                    removeImage(); 
+                    
+                } else {
+                    const res = await fetch('http://127.0.0.1:8000/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message: text })
+                    });
+                    data = await res.json();
+                }
+
+                document.getElementById(loadingId).remove();
+
+                appendMessage('ai', data.response);
+
+                if (data.recommended_products && data.recommended_products.length > 0) {
+                    let productsHtml = '<p class="mb-2 font-bold text-indigo-600">I found these items for you:</p>';
+                    data.recommended_products.forEach(p => {
+                        productsHtml += generateProductCard(p);
+                    });
+                    appendMessage('ai', productsHtml, true);
+                }
+
+            } catch (error) {
+                document.getElementById(loadingId).remove();
+                appendMessage('ai', ' Connection failed. Please ensure main.py is running.');
+                console.error(error);
+            }
+        }
+
+        function clearChat() {
+            chatBox.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
